@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BioDock Education – NCBI‑style Console for Docking</title>
+<style>
+  :root{
+    --ncbi-blue:#205493;
+    --ncbi-blue-dark:#1a447a;
+    --ncbi-gray:#f5f6f7;
+    --ncbi-border:#dfe1e6;
+    --text:#1b1f24;
+    --muted:#64748b;
+    --ok:#2e7d32;
+    --warn:#b26a00;
+    --bad:#b00020;
+    --chip:#e8eef7;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    background:#fff;
+  }
+  /* NCBI-like header */
+  header{
+    background:var(--ncbi-blue);
+    color:#fff;
+    padding:10px 16px;
+    display:flex;align-items:center;gap:16px;
+    position:sticky;top:0;z-index:5;
+  }
+  .brand{
+    font-weight:700;letter-spacing:.2px;font-size:18px;white-space:nowrap;
+  }
+  .searchbar{
+    flex:1;display:flex;gap:8px;max-width:980px;margin:0 auto;
+  }
+  .searchbar input{
+    width:100%;padding:10px 12px;border:none;border-radius:4px;
+    outline:2px solid transparent;
+  }
+  .searchbar input:focus{outline-color:#9ec3ff}
+  .searchbar button{
+    background:#fff;color:var(--ncbi-blue);
+    border:none;border-radius:4px;padding:10px 14px;font-weight:600;cursor:pointer;
+  }
+  .searchbar button:hover{background:#eef4ff}
+  main{display:grid;grid-template-columns:290px 1fr;gap:0}
+  aside{
+    background:var(--ncbi-gray);border-right:1px solid var(--ncbi-border);
+    min-height:calc(100dvh - 56px);padding:14px 12px;position:sticky;top:56px;
+  }
+  .panel{
+    background:#fff;border:1px solid var(--ncbi-border);border-radius:8px;
+    margin-bottom:12px;overflow:hidden;
+  }
+  .panel h3{
+    margin:0;padding:10px 12px;font-size:14px;text-transform:uppercase;
+    letter-spacing:.08em;background:#f9fafb;border-bottom:1px solid var(--ncbi-border);color:#0f172a;
+  }
+  .panel .body{padding:10px 12px}
+  .chip{
+    display:inline-block;background:var(--chip);border:1px solid #d6e3fb;color:#0f3b7a;
+    padding:4px 8px;border-radius:999px;font-size:12px;margin:2px 4px 2px 0;cursor:pointer;
+  }
+  .muted{color:var(--muted)}
+  .mini{font-size:12px}
+  /* Console */
+  .workspace{padding:16px;min-height:calc(100dvh - 56px);background:#fff}
+  .crumbs{font-size:12px;color:var(--muted);margin:2px 0 12px}
+  .console{
+    background:#0b1020;color:#e6edf3;border-radius:10px;border:1px solid #242b3d;
+    font-family:ui-monospace,SFMono-Regular,Consolas,Menlo,monospace;
+    padding:12px;min-height:280px;max-height:420px;overflow:auto;
+    box-shadow:0 2px 16px rgba(2,6,23,.06);
+  }
+  .line{white-space:pre-wrap;word-break:break-word;margin:0 0 6px}
+  .prompt{color:#8ab4ff}
+  .ok{color:#9be38d}
+  .warn{color:#ffd27f}
+  .bad{color:#ff8a8a}
+  .cmdbar{
+    display:flex;gap:8px;margin:10px 0 16px
+  }
+  .cmdbar input{
+    flex:1;border:1px solid #cbd5e1;border-radius:8px;padding:12px 14px;font-family:ui-monospace,monospace;
+  }
+  .cmdbar button{
+    border:none;border-radius:8px;padding:12px 14px;background:var(--ncbi-blue);color:#fff;font-weight:700;cursor:pointer;
+  }
+  .cmdbar button:hover{background:var(--ncbi-blue-dark)}
+  /* Result cards */
+  .cards{display:grid;grid-template-columns:repeat(12,1fr);gap:12px}
+  .card{
+    grid-column:span 6;background:#fff;border:1px solid var(--ncbi-border);border-radius:10px;
+    padding:12px
+  }
+  .card h4{margin:0 0 6px}
+  .kv{display:grid;grid-template-columns:160px 1fr;gap:8px;font-size:14px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#eef2ff;color:#3730a3;font-weight:600;font-size:12px}
+  .energy{font-weight:800}
+  .energy.good{color:var(--ok)}
+  .energy.mid{color:#3366cc}
+  .energy.bad{color:var(--warn)}
+  .footer-note{margin-top:10px;color:#475569;font-size:12px}
+  .btnlink{background:#eef4ff;color:#173e7a;padding:8px 10px;border-radius:8px;border:1px solid #c7dbff;display:inline-block;text-decoration:none;font-weight:600}
+  /* Responsive */
+  @media (max-width: 1100px){
+    main{grid-template-columns:1fr}
+    aside{position:static;min-height:auto}
+    .card{grid-column:span 12}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">BioDock Education (NCBI‑style)</div>
+  <div class="searchbar" role="search">
+    <input id="globalSearch" placeholder="Search ligands (name or PubChem CID), targets (AChE, MAOB, COX2, BACE1, TAU), or commands (e.g., `help`)" />
+    <button id="searchBtn" aria-label="Search">Search</button>
+  </div>
+</header>
+
+<main>
+  <!-- Left: NCBI-like filters & quick actions -->
+  <aside>
+    <div class="panel">
+      <h3>Quick Start</h3>
+      <div class="body">
+        <div class="chip" data-cmd="help">help</div>
+        <div class="chip" data-cmd="list ligands">list ligands</div>
+        <div class="chip" data-cmd="list targets">list targets</div>
+        <div class="chip" data-cmd="dock curcumin ache">dock curcumin ache</div>
+        <div class="chip" data-cmd="dock bacoside maob">dock bacoside maob</div>
+        <div class="chip" data-cmd="explain">explain</div>
+        <div class="chip" data-cmd="show config">show config</div>
+        <div class="chip" data-cmd="clear">clear</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Mode</h3>
+      <div class="body">
+        <div class="chip" data-cmd="mode learning">learning</div>
+        <div class="chip" data-cmd="mode research">research</div>
+        <p class="mini muted">Learning adds biological explanations; Research keeps output compact.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Targets</h3>
+      <div class="body mini">
+        <p><b>AChE</b> – acetylcholinesterase (memory)</p>
+        <p><b>MAOB</b> – monoamine oxidase‑B (Parkinson’s)</p>
+        <p><b>COX2</b> – inflammation</p>
+        <p><b>BACE1</b> – amyloid processing</p>
+        <p><b>TAU</b> – tau aggregation</p>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Natural Ligands</h3>
+      <div class="body mini">
+        <p>Curcumin (turmeric), Quercetin (curry leaves), Bacoside A (Brahmi), Mahanimbine, Rosmarinic acid, Gallic acid, Kaempferol, Rutin, Luteolin.</p>
+        <p class="muted">Use names or PubChem CIDs where available.</p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right: console + output -->
+  <section class="workspace">
+    <div class="crumbs">Home ▸ Docking Console</div>
+
+    <div class="console" id="console" aria-live="polite"></div>
+
+    <div class="cmdbar">
+      <input id="cmd" placeholder="Type a command, e.g., dock curcumin ache" aria-label="Docking command line" />
+      <button id="run">Run</button>
+    </div>
+
+    <div class="cards">
+      <div class="card" id="summaryCard">
+        <h4>Run Summary</h4>
+        <div class="kv">
+          <div>Ligand</div><div id="sumLigand" class="muted">—</div>
+          <div>Ligand Source</div><div id="sumSource" class="muted">—</div>
+          <div>Target</div><div id="sumTarget" class="muted">—</div>
+          <div>Docking Energy</div><div id="sumEnergy" class="energy">—</div>
+          <div>Box (Å)</div><div id="sumBox" class="muted">—</div>
+          <div>Mode</div><div id="sumMode"><span class="badge">Learning</span></div>
+        </div>
+        <div class="footer-note">This is an in‑browser educational simulator (no external executables). Use the generated Vina config to run real docking on your machine or Colab.</div>
+      </div>
+
+      <div class="card" id="explainCard">
+        <h4>Biological Interpretation</h4>
+        <div id="explainText" class="muted">Run <code>dock &lt;ligand&gt; &lt;target&gt;</code> then <code>explain</code> to see an effect summary.</div>
+        <div style="margin-top:10px"><a id="exportConfig" class="btnlink" href="#" download="vina_config.txt">Download Vina config</a></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* -----------------------
+   Minimal in-browser database
+------------------------ */
+const Ligands = [
+  // name, aliases, pubchem CID (if known), source, notes
+  { name:"curcumin", aliases:["turmeric","curcuminoid","CID969516"], cid:"969516",
+    source:"Turmeric (Curcuma longa)",
+    notes:"Polyphenolic anti‑inflammatory; reported interactions with COX‑2, NF‑κB, BACE1." },
+  { name:"quercetin", aliases:["curry leaves","CID5280343"], cid:"5280343",
+    source:"Curry leaves, onion, many plants",
+    notes:"Flavonoid antioxidant; reported AChE/MAO‑B inhibition and anti‑aggregation effects." },
+  { name:"bacoside", aliases:["bacoside a","brahmi","bacopa","CID5318840"], cid:"5318840",
+    source:"Brahmi (Bacopa monnieri)",
+    notes:"Triterpenoid saponin; neuroprotective; reported MAO‑B modulation and synaptic support." },
+  { name:"mahanimbine", aliases:["murraya koenigii","CID100762"], cid:"100762",
+    source:"Curry leaves (Murraya koenigii)",
+    notes:"Carbazole alkaloid; antioxidant and AChE inhibitory reports." },
+  { name:"rosmarinic acid", aliases:["rosmarinic","CID5281792"], cid:"5281792",
+    source:"Rosemary, basil",
+    notes:"Polyphenol; anti‑inflammatory; reported AChE/BACE1 interactions." },
+  { name:"gallic acid", aliases:["CID370"], cid:"370",
+    source:"Tea, gallnuts",
+    notes:"Phenolic acid; antioxidant; weak AChE/aggregation modulation." },
+  { name:"kaempferol", aliases:["CID5280863"], cid:"5280863",
+    source:"Many plants",
+    notes:"Flavonol; reported AChE/MAO‑B binding and anti‑aggregation." },
+  { name:"rutin", aliases:["quercetin-3-rutinoside","CID5280805"], cid:"5280805",
+    source:"Citrus, buckwheat",
+    notes:"Glycosylated quercetin; antioxidant; larger size affects pocket fit." },
+  { name:"luteolin", aliases:["CID5280445"], cid:"5280445",
+    source:"Many herbs",
+    notes:"Flavone; reported AChE/MAO‑B inhibition and anti‑inflammatory." },
+];
+
+const Targets = [
+  { key:"ache", name:"Acetylcholinesterase (AChE)", site:"Active gorge near catalytic triad (SER‑HIS‑GLU)", box:[22,22,22] },
+  { key:"maob", name:"Monoamine oxidase‑B (MAO‑B)", site:"FAD cavity and entrance channel", box:[24,22,20] },
+  { key:"cox2", name:"Cyclooxygenase‑2 (COX‑2)", site:"Hydrophobic channel near Arg120/Tyr355", box:[26,24,24] },
+  { key:"bace1", name:"β‑Secretase 1 (BACE1)", site:"Asp32/Asp228 catalytic dyad pocket", box:[24,22,22] },
+  { key:"tau", name:"Tau aggregation interface", site:"PHF6/PHF6* aggregation hotspot", box:[28,26,24] },
+];
+
+/* -------- State -------- */
+let current = {
+  mode:"learning",
+  ligand:null,
+  target:null,
+  score:null,
+  config:null,
+  box:[22,22,22],
+  seed:42,
+};
+
+/* ------------- Utilities --------------- */
+function $(q){ return document.querySelector(q); }
+function esc(s){ return String(s).replace(/[&<>]/g, m=>({ "&":"&amp;","<":"&lt;",">":"&gt;" }[m])); }
+function log(type, msg){
+  const wrap = document.createElement('div');
+  wrap.className = 'line ' + (type||'');
+  wrap.innerHTML = msg;
+  $('#console').appendChild(wrap);
+  $('#console').scrollTop = $('#console').scrollHeight;
+}
+function promptLine(cmd){ log('prompt', '▶ ' + esc(cmd)); }
+function setSummary(){
+  $('#sumLigand').textContent = current.ligand ? prettyLigand(current.ligand) : '—';
+  $('#sumSource').textContent = current.ligand ? current.ligand.source : '—';
+  $('#sumTarget').textContent = current.target ? current.target.name : '—';
+  const e = $('#sumEnergy');
+  if(current.score==null){ e.textContent='—'; e.className='energy'; }
+  else{
+    e.textContent = `${current.score.toFixed(1)} kcal/mol`;
+    e.className = 'energy ' + (current.score <= -8 ? 'good' : current.score <= -6.5 ? 'mid' : 'bad');
+  }
+  $('#sumBox').textContent = current.box ? current.box.map(x=>x.toFixed(1)).join(' × ') : '—';
+  $('#sumMode').innerHTML = `<span class="badge">${current.mode[0].toUpperCase()+current.mode.slice(1)}</span>`;
+}
+function prettyLigand(l){ 
+  const id = l.cid ? ` (CID ${l.cid})` : '';
+  return l.name[0].toUpperCase()+l.name.slice(1) + id;
+}
+function findLigand(token){
+  token = String(token||'').trim().toLowerCase();
+  if(!token) return null;
+  // Try by name or alias
+  let hit = Ligands.find(l=>l.name===token || (l.aliases||[]).includes(token));
+  if(hit) return hit;
+  // Try by CID number (accept with/without 'cid')
+  const cid = token.replace(/^cid/i,'').replace(/\D/g,'');
+  if(cid){
+    hit = Ligands.find(l=>l.cid===cid);
+    if(hit) return hit;
+  }
+  // Partial match
+  hit = Ligands.find(l=>l.name.includes(token));
+  return hit || null;
+}
+function findTarget(token){
+  token = String(token||'').trim().toLowerCase();
+  if(!token) return null;
+  return Targets.find(t=>t.key===token || t.name.toLowerCase().includes(token));
+}
+function hashStr(s){
+  // simple deterministic hash -> integer
+  let h=2166136261>>>0;
+  for(let i=0;i<s.length;i++){h ^= s.charCodeAt(i); h += (h<<1)+(h<<4)+(h<<7)+(h<<8)+(h<<24); }
+  return h>>>0;
+}
+function seededScore(ligand, target){
+  // Deterministic pseudo "binding energy" based on ligand+target hash
+  // Center ~ -7.2, adjust by ligand size class & target preference heuristics
+  let base = -7.2;
+  const s = (hashStr(ligand.name + ':' + target.key) % 4000)/1000; // 0..3.999
+  base -= (s - 2); // -2..+2 → shift around center
+  // Heuristic tweaks
+  const flavonoids = ["quercetin","kaempferol","luteolin","rutin"];
+  const bulky = ["rutin","bacoside"];
+  if(flavonoids.includes(ligand.name) && ['ache','maob'].includes(target.key)) base -= 0.6;
+  if(ligand.name==='curcumin' && (target.key==='cox2' || target.key==='bace1')) base -= 0.7;
+  if(ligand.name==='gallic acid') base += 0.6;
+  if(bulky.includes(ligand.name) && target.key==='ache') base += 0.5; // steric penalty
+  // Clamp
+  if(base<-10.2) base=-10.2;
+  if(base>-5.0) base=-5.0;
+  return base;
+}
+function autoBoxFor(target){
+  // Prebaked per target + light random jitter for realism
+  const t = target.box.slice();
+  const jitter = (hashStr(target.key+String(Date.now()).slice(-4))%3)/10; // 0..0.2
+  return t.map(x=>x + jitter);
+}
+function buildVinaConfig(ligand, target, box, score){
+  // Minimal example Vina config (centers are illustrative)
+  const center = { x: 10.0, y: 15.0, z: -5.0 }; // placeholder for edu use
+  return [
+    `# Auto-generated Vina config (educational)`,
+    `receptor = ${target.key}.pdbqt`,
+    `ligand = ${ligand.name}.pdbqt`,
+    ``,
+    `center_x = ${center.x}`,
+    `center_y = ${center.y}`,
+    `center_z = ${center.z}`,
+    `size_x = ${box[0].toFixed(1)}`,
+    `size_y = ${box[1].toFixed(1)}`,
+    `size_z = ${box[2].toFixed(1)}`,
+    ``,
+    `exhaustiveness = 8`,
+    `num_modes = 9`,
+    `energy_range = 3`,
+    `# Estimated binding energy (simulated): ${score.toFixed(1)} kcal/mol`,
+  ].join('\n');
+}
+function updateConfigDownload(){
+  if(current.config){
+    const blob = new Blob([current.config], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = $('#exportConfig');
+    a.href = url;
+    a.download = `vina_${current.ligand.name}_${current.target.key}_config.txt`;
+  }
+}
+
+/* ----------- Explanations ----------- */
+function biologicalExplanation(ligand, target, score){
+  const map = {
+    ache: `Inhibiting AChE slows acetylcholine breakdown, which can support memory and attention. Docking here approximates if ${capitalize(ligand.name)} can sit in the catalytic gorge.`,
+    maob: `MAO‑B breaks down dopamine in glia. Binding may reduce dopamine degradation, relevant to Parkinson’s symptoms.`,
+    cox2: `COX‑2 drives prostaglandin synthesis in inflammation. Binding can suggest anti‑inflammatory activity.`,
+    bace1:`BACE1 starts amyloid‑β production. Binding may hint at reduced Aβ generation in Alzheimer’s pathways.`,
+    tau:  `Tau misfolding/aggregation disrupts microtubules. Binding at aggregation hotspots could indicate anti‑aggregation potential.`,
+  };
+  let spice = '';
+  switch(ligand.name){
+    case 'curcumin': spice = `Curcumin’s planar conjugation fits hydrophobic channels (e.g., COX‑2) and can H‑bond at polar rims.`; break;
+    case 'quercetin': spice = `Quercetin offers multiple H‑bond donors/acceptors and π–π stacking in aromatic pockets (AChE/MAO‑B).`; break;
+    case 'bacoside': spice = `Bacoside is bulky; sterics may limit deep gorge access (AChE) but favor surface/entrance binding.`; break;
+    case 'mahanimbine': spice = `Mahanimbine’s carbazole ring supports hydrophobic and π interactions in aromatic cavities.`; break;
+    case 'rutin': spice = `Rutin is large/glycosylated; often prefers shallow or solvent‑exposed sites.`; break;
+    default: spice = `${capitalize(ligand.name)}’s reported neuroprotective/antioxidant motifs may complement ${target.name}.`;
+  }
+  const verdict =
+    score <= -8 ? `Strong predicted affinity (≤−8 kcal/mol) — promising for follow‑up.` :
+    score <= -6.5 ? `Moderate predicted affinity — plausible binder, needs validation.` :
+    `Weak predicted affinity — may require analogs or different target.`;
+  return `${map[target.key]} ${spice} ${verdict}`;
+}
+function capitalize(s){ return s ? s[0].toUpperCase()+s.slice(1) : s; }
+
+/* ------------- Command Engine -------------- */
+function runCommand(raw){
+  const input = String(raw||'').trim();
+  if(!input) return;
+  promptLine(input);
+  const [cmd, ...rest] = input.toLowerCase().split(/\s+/);
+
+  if(cmd==='help'){
+    log('', [
+      `Available commands:`,
+      `  help                        – show this help`,
+      `  list ligands|targets       – show built-in items`,
+      `  mode learning|research     – toggle verbosity`,
+      `  target <name>              – set target (ache|maob|cox2|bace1|tau)`,
+      `  dock <ligand> [target]     – auto ligand lookup + target + simulate docking`,
+      `  explain                    – biological summary for last run`,
+      `  show config                – print the generated Vina config`,
+      `  clear                      – clear console`,
+    ].join('\n').replace(/^/gm,'<span class="muted">').replace(/$/gm,'</span>'));
+    return;
+  }
+
+  if(cmd==='clear'){ $('#console').innerHTML=''; return; }
+
+  if(cmd==='list'){
+    const what = rest.join(' ').trim();
+    if(what==='ligands'){
+      const lines = Ligands.map(l=>` • ${capitalize(l.name)}${l.cid?` (CID ${l.cid})`:''} — ${l.source}`);
+      log('', `<span class="ok">Ligands</span>\n${esc(lines.join('\n'))}`);
+    } else if(what==='targets'){
+      const lines = Targets.map(t=>` • ${t.key.toUpperCase()} — ${t.name}`);
+      log('', `<span class="ok">Targets</span>\n${esc(lines.join('\n'))}`);
+    } else {
+      log('warn', `Usage: list ligands  |  list targets`);
+    }
+    return;
+  }
+
+  if(cmd==='mode'){
+    const m = (rest[0]||'').toLowerCase();
+    if(m==='learning' || m==='research'){
+      current.mode = m;
+      setSummary();
+      log('ok', `Mode set to <b>${esc(capitalize(m))}</b>.`);
+    } else {
+      log('warn', `Mode must be 'learning' or 'research'.`);
+    }
+    return;
+  }
+
+  if(cmd==='target'){
+    const t = findTarget(rest[0]);
+    if(!t){ log('warn', `Unknown target. Try: ache, maob, cox2, bace1, tau`); return; }
+    current.target = t;
+    current.box = autoBoxFor(t);
+    current.score = null;
+    current.config = null;
+    setSummary();
+    log('ok', `Target set to <b>${esc(t.name)}</b>. Dock size auto: ${current.box.map(x=>x.toFixed(1)).join(' × ')} Å.`);
+    return;
+  }
+
+  if(cmd==='dock'){
+    if(rest.length===0){ log('warn', `Usage: dock &lt;ligand-name-or-cid&gt; [target]`); return; }
+    const ligandToken = rest[0];
+    const targetToken = rest[1];
+    const lig = findLigand(ligandToken);
+    if(!lig){ log('bad', `Ligand not found: ${esc(ligandToken)}. Try 'list ligands'.`); return; }
+    let tgt = current.target;
+    if(targetToken){ 
+      const ft = findTarget(targetToken); 
+      if(!ft){ log('warn', `Unknown target '${esc(targetToken)}'. Using previous or default AChE.`); }
+      else tgt = ft;
+    }
+    if(!tgt) tgt = Targets[0]; // default AChE
+
+    current.ligand = lig;
+    current.target = tgt;
+    current.box = autoBoxFor(tgt);
+    current.score = seededScore(lig, tgt);
+    current.config = buildVinaConfig(lig, tgt, current.box, current.score);
+    setSummary();
+    updateConfigDownload();
+
+    log('ok', `✔ Loaded ligand <b>${esc(prettyLigand(lig))}</b> from ${esc(lig.source)}.`);
+    log('ok', `✔ Target <b>${esc(tgt.name)}</b> — site: ${esc(tgt.site)}.`);
+    log('', `⚙ Simulating docking…`);
+    log('', `<b>Binding energy:</b> <span class="${ current.score<=-8?'ok': current.score<=-6.5?'':'warn'}">${esc(current.score.toFixed(1))} kcal/mol</span>`);
+    if(current.mode==='learning'){
+      const expl = biologicalExplanation(lig, tgt, current.score);
+      $('#explainText').textContent = expl;
+      log('', `<i>Tip:</i> type <code>explain</code> for biological meaning.`);
+    } else {
+      $('#explainText').textContent = 'Research mode is brief. Switch to learning mode for explanations.';
+    }
+    return;
+  }
+
+  if(cmd==='explain'){
+    if(!current.ligand || !current.target || current.score==null){ log('warn', `Run a docking first: dock &lt;ligand&gt; &lt;target&gt;`); return; }
+    const expl = biologicalExplanation(current.ligand, current.target, current.score);
+    log('', `<b>Explanation:</b> ${esc(expl)}`);
+    $('#explainText').textContent = expl;
+    return;
+  }
+
+  if(cmd==='show' && rest[0]==='config'){
+    if(!current.config){ log('warn', `No config yet. Run 'dock &lt;ligand&gt; [target]' first.`); return; }
+    log('', `<div class="mini" style="white-space:pre">${esc(current.config)}</div>`);
+    return;
+  }
+
+  // Fallback: global search behavior (NCBI-like top bar reuses this)
+  if(cmd){ 
+    const guessLig = findLigand(cmd);
+    const guessTgt = findTarget(cmd);
+    if(guessLig){ runCommand(`dock ${cmd} ${current.target ? current.target.key : 'ache'}`); return; }
+    if(guessTgt){ runCommand(`target ${cmd}`); return; }
+    log('warn', `Unknown command. Type <b>help</b> for options.`);
+  }
+}
+
+/* ----------- Wire up UI ----------- */
+$('#run').addEventListener('click', ()=>{ runCommand($('#cmd').value); $('#cmd').value=''; $('#cmd').focus(); });
+$('#cmd').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ $('#run').click(); }});
+$('#searchBtn').addEventListener('click', ()=>{
+  const q = $('#globalSearch').value.trim();
+  if(q) runCommand(q);
+});
+document.querySelectorAll('.chip').forEach(ch=> ch.addEventListener('click', ()=> runCommand(ch.dataset.cmd)));
+
+/* ----------- Boot ----------- */
+log('', `<b>Welcome to BioDock Education</b> — an NCBI‑style interface for teaching docking.`);
+log('', `Try: <code>dock curcumin ache</code>  or  <code>dock 5280343 maob</code>  •  Use <code>help</code> for commands.`);
+setSummary();
+</script>
+</body>
+</html>
